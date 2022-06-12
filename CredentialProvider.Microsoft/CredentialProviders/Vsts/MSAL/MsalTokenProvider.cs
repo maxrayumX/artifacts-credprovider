@@ -203,7 +203,7 @@ namespace NuGetCredentialProvider.CredentialProviders.Vsts
 #elif USE_GENERIC_BROKER
                 publicClientBuilder = publicClientBuilder.WithBroker();
 #else
-                throw new NotSupportedException("Use net461, netcoreapp3.1, or net6-windows10.0.17763.0 builds on Windows.");
+                this.Logger.Warning("Use net461, netcoreapp3.1, or net6-windows10.0.17763.0 builds on Windows.");
 #endif
             }
 
