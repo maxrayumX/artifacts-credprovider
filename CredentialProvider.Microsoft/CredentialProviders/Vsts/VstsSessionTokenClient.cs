@@ -9,6 +9,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
+using NuGetCredentialProvider.Logging;
 
 namespace NuGetCredentialProvider.CredentialProviders.Vsts
 {
@@ -21,30 +22,19 @@ namespace NuGetCredentialProvider.CredentialProviders.Vsts
         private readonly Uri vstsUri;
         private readonly string bearerToken;
         private readonly IAuthUtil authUtil;
+        private readonly ILogger logger;
 
-        public VstsSessionTokenClient(Uri vstsUri, string bearerToken, IAuthUtil authUtil)
+        public VstsSessionTokenClient(Uri vstsUri, string bearerToken, IAuthUtil authUtil, ILogger logger)
         {
             this.vstsUri = vstsUri ?? throw new ArgumentNullException(nameof(vstsUri));
             this.bearerToken = bearerToken ?? throw new ArgumentNullException(nameof(bearerToken));
             this.authUtil = authUtil ?? throw new ArgumentNullException(nameof(authUtil));
+            this.logger = logger ?? throw new ArgumentException(nameof(logger));
         }
 
-        public async Task<string> CreateSessionTokenAsync(VstsTokenType tokenType, DateTime validTo, CancellationToken cancellationToken)
+        private HttpRequestMessage CreateRequest(Uri uri, DateTime? validTo)
         {
-            var spsEndpoint = await authUtil.GetAuthorizationEndpoint(vstsUri, cancellationToken);
-            if (spsEndpoint == null)
-            {
-                return null;
-            }
-
-            var uriBuilder = new UriBuilder(spsEndpoint)
-            {
-                Query = $"tokenType={tokenType}&api-version=5.0-preview.1"
-            };
-
-            uriBuilder.Path = uriBuilder.Path.TrimEnd('/') + "/_apis/Token/SessionTokens";
-
-            var request = new HttpRequestMessage(HttpMethod.Post, uriBuilder.Uri);
+            var request = new HttpRequestMessage(HttpMethod.Post, uri);
             request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", bearerToken);
 
@@ -65,22 +55,37 @@ namespace NuGetCredentialProvider.CredentialProviders.Vsts
                 Encoding.UTF8,
                 "application/json");
 
+            return request;
+        }
+
+        public async Task<string> CreateSessionTokenAsync(VstsTokenType tokenType, DateTime validTo, CancellationToken cancellationToken)
+        {
+            var spsEndpoint = await authUtil.GetAuthorizationEndpoint(vstsUri, cancellationToken);
+            if (spsEndpoint == null)
+            {
+                return null;
+            }
+
+            var uriBuilder = new UriBuilder(spsEndpoint)
+            {
+                Query = $"tokenType={tokenType}&api-version=5.0-preview.1"
+            };
+
+            uriBuilder.Path = uriBuilder.Path.TrimEnd('/') + "/_apis/Token/SessionTokens";
+
+            using (var request = CreateRequest(uriBuilder.Uri, validTo))
             using (var response = await httpClient.SendAsync(request, cancellationToken))
             {
                 string serializedResponse;
                 if (response.StatusCode == System.Net.HttpStatusCode.BadRequest)
                 {
+                    
+                    request.Dispose();
                     response.Dispose();
 
-                    // Let service decide the lifetime.
-                    tokenRequest.ValidTo = null;
-
-                    request.Content = new StringContent(
-                        JsonConvert.SerializeObject(tokenRequest),
-                        Encoding.UTF8,
-                        "application/json");
-
-                    using(var response2 = await httpClient.SendAsync(request, cancellationToken))
+                    logger.Log(NuGet.Common.LogLevel.Verbose, true, "Re-trying with service-defined valid-time.");
+                    using (var request2 = CreateRequest(uriBuilder.Uri, validTo: null))
+                    using(var response2 = await httpClient.SendAsync(request2, cancellationToken))
                     {
                         response2.EnsureSuccessStatusCode();
                         serializedResponse = await response2.Content.ReadAsStringAsync();
@@ -93,6 +98,12 @@ namespace NuGetCredentialProvider.CredentialProviders.Vsts
                 }
                 
                 var responseToken = JsonConvert.DeserializeObject<VstsSessionToken>(serializedResponse);
+
+                if (validTo.Subtract(responseToken.ValidTo.Value).TotalHours > 1.0)
+                {
+                    logger.Log(NuGet.Common.LogLevel.Information, true, $"Requested {validTo} but received {responseToken.ValidTo}");
+                }
+
                 return responseToken.Token;
             }
         }
