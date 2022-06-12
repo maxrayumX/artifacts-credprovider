@@ -99,14 +99,19 @@ namespace NuGetCredentialProvider.CredentialProviders.Vsts
                 {
                     try
                     {
+                        this.Logger.Verbose($"Attempting to use identity `{account.HomeAccountId}\\{account.Username}`.");
                         var silentBuilder = publicClient.AcquireTokenSilent(new string[] { resource }, account);
                         var result = await silentBuilder.ExecuteAsync(cancellationToken);
                         return new MsalToken(result);
                     }
-                    catch (MsalUiRequiredException)
-                    { }
-                    catch (MsalServiceException)
-                    { }
+                    catch (MsalUiRequiredException e)
+                    { 
+                        this.Logger.Verbose(e.Message);
+                    }
+                    catch (MsalServiceException e)
+                    {
+                        this.Logger.Verbose(e.Message);
+                    }
                 }
             }
             finally

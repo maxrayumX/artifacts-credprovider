@@ -25,7 +25,7 @@ namespace NuGetCredentialProvider.CredentialProviders.Vsts
         }
 
         public bool Interactive { get; } = false;
-        public string Name { get; } = "MSAL AcquireTokenSilently";
+        public string Name { get; } = "MSAL Broker and Cache";
 
         public async Task<string> GetTokenAsync(Uri uri, CancellationToken cancellationToken)
         {
@@ -51,7 +51,7 @@ namespace NuGetCredentialProvider.CredentialProviders.Vsts
         }
 
         public bool Interactive { get; } = false;
-        public string Name { get; } = "Msal Windows Integrated Authentication";
+        public string Name { get; } = "MSAL Windows Integrated Authentication";
 
         public async Task<string> GetTokenAsync(Uri uri, CancellationToken cancellationToken)
         {
