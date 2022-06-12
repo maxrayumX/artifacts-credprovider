@@ -52,7 +52,7 @@ namespace CredentialProvider.Microsoft.Tests.CredentialProviders.Vsts
 
             var authorityUri = await authUtil.GetAadAuthorityUriAsync(requestUri, cancellationToken);
 
-            authorityUri.Should().Be(commonAuthority);
+            authorityUri.Should().Be(EnvUtil.MsalEnabled() ? organizationsAuthority : commonAuthority);
         }
 
         [TestMethod]

@@ -11,6 +11,11 @@ using Microsoft.Identity.Client;
 using Microsoft.Identity.Client.Extensions.Msal;
 using NuGetCredentialProvider.Logging;
 using NuGetCredentialProvider.Util;
+using System.Linq;
+
+#if USE_WINDOWS_BROKER
+using Microsoft.Identity.Client.Desktop;
+#endif
 
 namespace NuGetCredentialProvider.CredentialProviders.Vsts
 {
@@ -46,7 +51,8 @@ namespace NuGetCredentialProvider.CredentialProviders.Vsts
                 var fileName = Path.GetFileName(cacheLocation);
                 var directory = Path.GetDirectoryName(cacheLocation);
 
-                var builder = new StorageCreationPropertiesBuilder(fileName, directory, this.clientId);
+                var builder = new StorageCreationPropertiesBuilder(fileName, directory);
+                builder = builder.WithCacheChangedEvent(this.clientId, "https://login.microsoftonline.com/common");
                 StorageCreationProperties creationProps = builder.Build();
                 helper = await MsalCacheHelper.CreateAsync(creationProps);
             }
@@ -84,6 +90,11 @@ namespace NuGetCredentialProvider.CredentialProviders.Vsts
 
             try
             {
+                if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+                {
+                    accounts = accounts.Concat(new [] { PublicClientApplication.OperatingSystemAccount});
+                }
+
                 foreach (var account in accounts)
                 {
                     try
@@ -179,6 +190,17 @@ namespace NuGetCredentialProvider.CredentialProviders.Vsts
 
             var publicClientBuilder = PublicClientApplicationBuilder.Create(this.clientId)
                 .WithAuthority(this.authority);
+
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+#if USE_WINDOWS_BROKER
+                publicClientBuilder = publicClientBuilder.WithWindowsBroker(true);
+#elif USE_GENERIC_BROKER
+                publicClientBuilder = publicClientBuilder.WithBroker();
+#else
+                throw new NotSupportedException("Use net461, netcoreapp3.1, or net6-windows10.0.17763.0 builds on Windows.");
+#endif
+            }
 
             if (useLocalHost)
             {

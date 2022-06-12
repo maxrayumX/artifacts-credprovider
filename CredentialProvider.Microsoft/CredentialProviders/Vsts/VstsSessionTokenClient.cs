@@ -16,6 +16,8 @@ namespace NuGetCredentialProvider.CredentialProviders.Vsts
     {
         private const string TokenScope = "vso.packaging_write vso.drop_write";
 
+        private static readonly HttpClient httpClient = new HttpClient();
+
         private readonly Uri vstsUri;
         private readonly string bearerToken;
         private readonly IAuthUtil authUtil;
@@ -35,42 +37,63 @@ namespace NuGetCredentialProvider.CredentialProviders.Vsts
                 return null;
             }
 
-            using (var httpClient = new HttpClient())
+            var uriBuilder = new UriBuilder(spsEndpoint)
             {
-                httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-                httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", bearerToken);
+                Query = $"tokenType={tokenType}&api-version=5.0-preview.1"
+            };
 
-                foreach (var userAgent in Program.UserAgent)
+            uriBuilder.Path = uriBuilder.Path.TrimEnd('/') + "/_apis/Token/SessionTokens";
+
+            var request = new HttpRequestMessage(HttpMethod.Post, uriBuilder.Uri);
+            request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", bearerToken);
+
+            foreach (var userAgent in Program.UserAgent)
+            {
+                request.Headers.UserAgent.Add(userAgent);
+            }
+
+            var tokenRequest = new VstsSessionToken()
+            {
+                DisplayName = "Azure DevOps Artifacts Credential Provider",
+                Scope = TokenScope,
+                ValidTo = validTo
+            };
+
+            request.Content = new StringContent(
+                JsonConvert.SerializeObject(tokenRequest),
+                Encoding.UTF8,
+                "application/json");
+
+            using (var response = await httpClient.SendAsync(request, cancellationToken))
+            {
+                string serializedResponse;
+                if (response.StatusCode == System.Net.HttpStatusCode.BadRequest)
                 {
-                    httpClient.DefaultRequestHeaders.UserAgent.Add(userAgent);
+                    response.Dispose();
+
+                    // Let service decide the lifetime.
+                    tokenRequest.ValidTo = null;
+
+                    request.Content = new StringContent(
+                        JsonConvert.SerializeObject(tokenRequest),
+                        Encoding.UTF8,
+                        "application/json");
+
+                    using(var response2 = await httpClient.SendAsync(request, cancellationToken))
+                    {
+                        response2.EnsureSuccessStatusCode();
+                        serializedResponse = await response2.Content.ReadAsStringAsync();
+                    }
                 }
-
-                var content = new StringContent(
-                    JsonConvert.SerializeObject(
-                        new VstsSessionToken()
-                        {
-                            DisplayName = "Azure DevOps Artifacts Credential Provider",
-                            Scope = TokenScope,
-                            ValidTo = validTo
-                        }),
-                    Encoding.UTF8,
-                    "application/json");
-
-                var uriBuilder = new UriBuilder(spsEndpoint)
-                {
-                    Query = $"tokenType={tokenType}&api-version=5.0-preview.1"
-                };
-
-                uriBuilder.Path = uriBuilder.Path.TrimEnd('/') + "/_apis/Token/SessionTokens";
-
-                using (var response = await httpClient.PostAsync(uriBuilder.Uri, content, cancellationToken))
+                else
                 {
                     response.EnsureSuccessStatusCode();
-                    var serializedResponse = await response.Content.ReadAsStringAsync();
-                    var responseToken = JsonConvert.DeserializeObject<VstsSessionToken>(serializedResponse);
-
-                    return responseToken.Token;
+                    serializedResponse = await response.Content.ReadAsStringAsync();
                 }
+                
+                var responseToken = JsonConvert.DeserializeObject<VstsSessionToken>(serializedResponse);
+                return responseToken.Token;
             }
         }
     }
