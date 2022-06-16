@@ -13,7 +13,7 @@ using NuGetCredentialProvider.Logging;
 using NuGetCredentialProvider.Util;
 using System.Linq;
 
-#if USE_WINDOWS_BROKER
+#if REFERENCE_WINDOWS_BROKER
 using Microsoft.Identity.Client.Desktop;
 #endif
 
@@ -196,16 +196,17 @@ namespace NuGetCredentialProvider.CredentialProviders.Vsts
             var publicClientBuilder = PublicClientApplicationBuilder.Create(this.clientId)
                 .WithAuthority(this.authority);
 
+
+
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
-#if USE_WINDOWS_BROKER
+#if REFERENCE_WINDOWS_BROKER
                 publicClientBuilder = publicClientBuilder.WithWindowsBroker(true);
-#elif USE_GENERIC_BROKER
+#else 
                 publicClientBuilder = publicClientBuilder.WithBroker();
-#else
-                this.Logger.Warning("Use net461, netcoreapp3.1, or net6-windows10.0.17763.0 builds on Windows.");
 #endif
             }
+
 
             if (useLocalHost)
             {
