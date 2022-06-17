@@ -3,10 +3,12 @@ parameters:
   nuspecProperties: ''
 
 steps:
+# We need the SDK because the runtime does not include Microsoft.WindowsDesktop.App
+# https://stackoverflow.com/questions/71040894/docker-the-framework-microsoft-windowsdesktop-app-version-3-1-0-x64-was
 - task: UseDotNet@2
-  displayName: Install .NET Core 3.1 runtime
+  displayName: Install .NET Core 3.1 sdk
   inputs:
-    packageType: runtime
+    packageType: sdk
     version: 3.1.x
 
 - task: UseDotNet@2
@@ -38,16 +40,16 @@ steps:
   displayName: dotnet restore NuGet.config
   inputs:
     command: restore
-    projects: 'CredentialProvider.Microsoft/CredentialProvider.Microsoft.csproj'
+    projects: '**/*.csproj'
     feedsToUse: config
     nugetConfigPath: 'CredentialProvider.Microsoft/NuGet.config'
 
-- task: VSBuild@1
-  displayName: Build CredentialProvider
+- task: DotNetCoreCLI@2
+  displayName: dotnet build
   inputs:
-    solution: 'CredentialProvider.Microsoft/CredentialProvider.Microsoft.csproj'
-    configuration: '$(BuildConfiguration)'
-    msbuildArgs: '/t:rebuild'
+    command: build
+    projects: '**/*.csproj'
+    arguments: '--no-restore -c $(BuildConfiguration)'
 
 - ${{ if eq(parameters.sign, 'true') }}:
   - task: MSBuild@1

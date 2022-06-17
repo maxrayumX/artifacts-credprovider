@@ -9,10 +9,10 @@
   <PropertyGroup Condition=" $(IsWindowsHost) == 'true' ">
     <!-- dotnet on linux freaks out if these are in the list of frameworks - even if you are targeting one of the two above... -->
     <!-- Why net6-windows10.0.17763.0? see https://github.com/AzureAD/microsoft-authentication-library-for-dotnet/issues/3206 -->
-    <TargetFrameworks>$(TargetFrameworks);net461;net6-windows10.0.17763.0</TargetFrameworks>
+    <TargetFrameworks>$(TargetFrameworks);net461;net6.0-windows10.0.17763.0</TargetFrameworks>
   </PropertyGroup>
 
   <PropertyGroup Condition=" $(IsWindowsHost) != 'true' ">
-    <TargetFrameworks>$(TargetFrameworks);net6</TargetFrameworks>
+    <TargetFrameworks>$(TargetFrameworks);net6.0</TargetFrameworks>
   </PropertyGroup>
 </Project>
