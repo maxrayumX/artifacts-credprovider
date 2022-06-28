@@ -8,14 +8,11 @@ using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Identity.Client;
+using Microsoft.Identity.Client.Broker;
 using Microsoft.Identity.Client.Extensions.Msal;
 using NuGetCredentialProvider.Logging;
 using NuGetCredentialProvider.Util;
 using System.Linq;
-
-#if REFERENCE_WINDOWS_BROKER
-using Microsoft.Identity.Client.Desktop;
-#endif
 
 namespace NuGetCredentialProvider.CredentialProviders.Vsts
 {
@@ -196,17 +193,10 @@ namespace NuGetCredentialProvider.CredentialProviders.Vsts
             var publicClientBuilder = PublicClientApplicationBuilder.Create(this.clientId)
                 .WithAuthority(this.authority);
 
-
-
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            // if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
-#if REFERENCE_WINDOWS_BROKER
-                publicClientBuilder = publicClientBuilder.WithWindowsBroker(true);
-#else 
-                publicClientBuilder = publicClientBuilder.WithBroker();
-#endif
+                publicClientBuilder = publicClientBuilder.WithBrokerPreview();
             }
-
 
             if (useLocalHost)
             {
