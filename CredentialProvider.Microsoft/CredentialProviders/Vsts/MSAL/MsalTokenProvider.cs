@@ -109,7 +109,7 @@ namespace NuGetCredentialProvider.CredentialProviders.Vsts
                 {
                     try
                     {
-                        this.Logger.Verbose($"Attempting to use identity `{account.HomeAccountId}\\{account.Username}`.");
+                        this.Logger.Verbose($"Attempting to use identity `{account.HomeAccountId}\\{account.Username}` with{(withBroker ? "" : "out")} WAM broker.");
                         var silentBuilder = publicClient.AcquireTokenSilent(new string[] { resource }, account);
                         var result = await silentBuilder.ExecuteAsync(cancellationToken);
                         return new MsalToken(result);
