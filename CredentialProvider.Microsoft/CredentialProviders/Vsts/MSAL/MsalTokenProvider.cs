@@ -65,7 +65,7 @@ namespace NuGetCredentialProvider.CredentialProviders.Vsts
             var linkedCancellationToken = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, cts.Token).Token;
             linkedCancellationToken.ThrowIfCancellationRequested();
 
-            var publicClient = await GetPCAAsync().ConfigureAwait(false);
+            var publicClient = await GetPCAAsync(withBroker: false, useLocalHost: false).ConfigureAwait(false);
 
             try
             {
@@ -82,11 +82,24 @@ namespace NuGetCredentialProvider.CredentialProviders.Vsts
 
         public async Task<IMsalToken> AcquireTokenSilentlyAsync(CancellationToken cancellationToken)
         {
-            var publicClient = await GetPCAAsync().ConfigureAwait(false);
-            var accounts = await publicClient.GetAccountsAsync();
+            // first try with the broker
+            IMsalToken token = await AcquireTokenSilentlyInnerAsync(withBroker: true, cancellationToken);
+            if (token != null)
+            {
+                return token;
+            }
 
+            return await AcquireTokenSilentlyInnerAsync(withBroker: false, cancellationToken);
+        }
+
+        private async Task<IMsalToken> AcquireTokenSilentlyInnerAsync(bool withBroker, CancellationToken cancellationToken)
+        {
+            IPublicClientApplication publicClient = null;
             try
             {
+                publicClient = await GetPCAAsync(withBroker, useLocalHost: false).ConfigureAwait(false);
+                var accounts = await publicClient.GetAccountsAsync();
+
                 if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
                 {
                     accounts = accounts.Concat(new [] { PublicClientApplication.OperatingSystemAccount});
@@ -114,7 +127,10 @@ namespace NuGetCredentialProvider.CredentialProviders.Vsts
             finally
             {
                 var helper = await GetMsalCacheHelperAsync();
-                helper?.UnregisterCache(publicClient.UserTokenCache);
+                if (publicClient != null)
+                {
+                    helper?.UnregisterCache(publicClient.UserTokenCache);
+                }
             }
 
             return null;
@@ -126,7 +142,7 @@ namespace NuGetCredentialProvider.CredentialProviders.Vsts
 
             CancellationTokenSource cts = new CancellationTokenSource(TimeSpan.FromSeconds(deviceFlowTimeout));
             var linkedCancellationToken = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, cts.Token).Token;
-            var publicClient = await GetPCAAsync(useLocalHost: true).ConfigureAwait(false);
+            var publicClient = await GetPCAAsync(withBroker: false, useLocalHost: true).ConfigureAwait(false);
 
             try
             {
@@ -154,7 +170,7 @@ namespace NuGetCredentialProvider.CredentialProviders.Vsts
 
         public async Task<IMsalToken> AcquireTokenWithWindowsIntegratedAuth(CancellationToken cancellationToken)
         {
-            var publicClient = await GetPCAAsync().ConfigureAwait(false);
+            var publicClient = await GetPCAAsync(withBroker: false, useLocalHost: false).ConfigureAwait(false);
 
             try
             {
@@ -186,7 +202,7 @@ namespace NuGetCredentialProvider.CredentialProviders.Vsts
             }
        }
 
-        private async Task<IPublicClientApplication> GetPCAAsync(bool useLocalHost = false)
+        private async Task<IPublicClientApplication> GetPCAAsync(bool withBroker, bool useLocalHost)
         {
             var helper = await GetMsalCacheHelperAsync().ConfigureAwait(false);
 

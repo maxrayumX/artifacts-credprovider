@@ -27,7 +27,7 @@ exit /b 0
 
 
 :TEST_FRAMEWORKS
-for %%I in ("netcoreapp3.1","net461","net6.0-windows10.0.17763.0") DO (
+for %%I in ("netcoreapp3.1","net461","net6.0") DO (
     del "!UserProfile!\AppData\Local\MicrosoftCredentialProvider\ADALTokenCache.dat" 2>NUL
     del "!UserProfile!\AppData\Local\MicrosoftCredentialProvider\SessionTokenCache.dat" 2>NUL
     echo Testing %%I with NUGET_CREDENTIALPROVIDER_MSAL_ENABLED=!NUGET_CREDENTIALPROVIDER_MSAL_ENABLED!
