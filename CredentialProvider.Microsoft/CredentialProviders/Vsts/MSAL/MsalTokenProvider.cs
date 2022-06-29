@@ -13,6 +13,7 @@ using Microsoft.Identity.Client.Extensions.Msal;
 using NuGetCredentialProvider.Logging;
 using NuGetCredentialProvider.Util;
 using System.Linq;
+using System.Collections.Generic;
 
 namespace NuGetCredentialProvider.CredentialProviders.Vsts
 {
@@ -22,20 +23,24 @@ namespace NuGetCredentialProvider.CredentialProviders.Vsts
         private readonly string authority;
         private readonly string resource;
         private readonly string clientId;
+        private readonly bool brokerEnabled;
         private static MsalCacheHelper helper;
         private bool cacheEnabled = false;
         private string cacheLocation;
 
-        internal MsalTokenProvider(string authority, string resource, string clientId, ILogger logger)
+        internal MsalTokenProvider(string authority, string resource, string clientId, bool brokerEnabled, ILogger logger)
         {
             this.authority = authority;
             this.resource = resource;
             this.clientId = clientId;
+            this.brokerEnabled = brokerEnabled;
             this.Logger = logger;
 
             this.cacheEnabled = EnvUtil.MsalFileCacheEnabled();
             this.cacheLocation = this.cacheEnabled ? EnvUtil.GetMsalCacheLocation() : null;
         }
+
+        public string NameSuffix => $"with{(this.brokerEnabled ? "" : "out")} WAM broker.";
 
         public ILogger Logger { get; private set; }
 
@@ -45,6 +50,8 @@ namespace NuGetCredentialProvider.CredentialProviders.Vsts
             // for now only support windows
             if (helper == null && this.cacheEnabled && RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
+                this.Logger.Verbose($"Using MSAL cache at `{cacheLocation}`.");
+
                 var fileName = Path.GetFileName(cacheLocation);
                 var directory = Path.GetDirectoryName(cacheLocation);
 
@@ -67,69 +74,47 @@ namespace NuGetCredentialProvider.CredentialProviders.Vsts
 
             var publicClient = await GetPCAAsync(withBroker: false, useLocalHost: false).ConfigureAwait(false);
 
-            try
-            {
-                var msalBuilder = publicClient.AcquireTokenWithDeviceCode(new string[] { resource }, deviceCodeHandler);
-                var result = await msalBuilder.ExecuteAsync(linkedCancellationToken);
-                return new MsalToken(result);
-            }
-            finally
-            {
-                var helper = await GetMsalCacheHelperAsync();
-                helper?.UnregisterCache(publicClient.UserTokenCache);
-            }
+            var msalBuilder = publicClient.AcquireTokenWithDeviceCode(new string[] { resource }, deviceCodeHandler);
+            var result = await msalBuilder.ExecuteAsync(linkedCancellationToken);
+            return new MsalToken(result);
         }
 
         public async Task<IMsalToken> AcquireTokenSilentlyAsync(CancellationToken cancellationToken)
         {
-            // first try with the broker
-            IMsalToken token = await AcquireTokenSilentlyInnerAsync(withBroker: true, cancellationToken);
-            if (token != null)
+            IPublicClientApplication publicClient = await GetPCAAsync(this.brokerEnabled, useLocalHost: false).ConfigureAwait(false);
+            var accounts = new List<IAccount>();
+
+            string loginHint = EnvUtil.GetMsalLoginHint();
+            
+            accounts.AddRange(await publicClient.GetAccountsAsync());
+
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
-                return token;
+                accounts.Add(PublicClientApplication.OperatingSystemAccount);
             }
 
-            return await AcquireTokenSilentlyInnerAsync(withBroker: false, cancellationToken);
-        }
-
-        private async Task<IMsalToken> AcquireTokenSilentlyInnerAsync(bool withBroker, CancellationToken cancellationToken)
-        {
-            IPublicClientApplication publicClient = null;
-            try
+            foreach (var account in accounts)
             {
-                publicClient = await GetPCAAsync(withBroker, useLocalHost: false).ConfigureAwait(false);
-                var accounts = await publicClient.GetAccountsAsync();
-
-                if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+                try
                 {
-                    accounts = accounts.Concat(new [] { PublicClientApplication.OperatingSystemAccount});
-                }
-
-                foreach (var account in accounts)
-                {
-                    try
+                    if (!string.IsNullOrEmpty(loginHint) && loginHint.Equals(account.ToString(), StringComparison.Ordinal))
                     {
-                        this.Logger.Verbose($"Attempting to use identity `{account.HomeAccountId}\\{account.Username}` with{(withBroker ? "" : "out")} WAM broker.");
-                        var silentBuilder = publicClient.AcquireTokenSilent(new string[] { resource }, account);
-                        var result = await silentBuilder.ExecuteAsync(cancellationToken);
-                        return new MsalToken(result);
+                        this.Logger.Verbose($"Skipping `{account.ToString()}`, because it does not match Login Hint:`{loginHint}`.");
+                        continue;
                     }
-                    catch (MsalUiRequiredException e)
-                    { 
-                        this.Logger.Verbose(e.Message);
-                    }
-                    catch (MsalServiceException e)
-                    {
-                        this.Logger.Verbose(e.Message);
-                    }
+
+                    this.Logger.Verbose($"Attempting to use identity `{account.ToString()}`.");
+                    var silentBuilder = publicClient.AcquireTokenSilent(new string[] { resource }, account);
+                    var result = await silentBuilder.ExecuteAsync(cancellationToken);
+                    return new MsalToken(result);
                 }
-            }
-            finally
-            {
-                var helper = await GetMsalCacheHelperAsync();
-                if (publicClient != null)
+                catch (MsalUiRequiredException e)
+                { 
+                    this.Logger.Verbose(e.Message);
+                }
+                catch (MsalServiceException e)
                 {
-                    helper?.UnregisterCache(publicClient.UserTokenCache);
+                    this.Logger.Warning(e.Message);
                 }
             }
 
@@ -161,11 +146,6 @@ namespace NuGetCredentialProvider.CredentialProviders.Vsts
 
                 throw;
             }
-            finally
-            {
-                var helper = await GetMsalCacheHelperAsync();
-                helper?.UnregisterCache(publicClient.UserTokenCache);
-            }
         }
 
         public async Task<IMsalToken> AcquireTokenWithWindowsIntegratedAuth(CancellationToken cancellationToken)
@@ -195,11 +175,6 @@ namespace NuGetCredentialProvider.CredentialProviders.Vsts
 
                 throw;
             }
-            finally
-            {
-                var helper = await GetMsalCacheHelperAsync();
-                helper?.UnregisterCache(publicClient.UserTokenCache);
-            }
        }
 
         private async Task<IPublicClientApplication> GetPCAAsync(bool withBroker, bool useLocalHost)
@@ -207,7 +182,20 @@ namespace NuGetCredentialProvider.CredentialProviders.Vsts
             var helper = await GetMsalCacheHelperAsync().ConfigureAwait(false);
 
             var publicClientBuilder = PublicClientApplicationBuilder.Create(this.clientId)
-                .WithAuthority(this.authority);
+                .WithAuthority(this.authority)
+                .WithLogging(
+                    (LogLevel level, string message, bool containsPii) => {
+                        if (containsPii)
+                        {
+                            this.Logger.Verbose($"MSAL Log ({level}): [REDACTED FOR PII]");
+                        }
+                        else
+                        {
+                            this.Logger.Verbose($"MSAL Log ({level}): {message}");
+
+                        }
+                    }
+                );
 
             if (withBroker)
             {

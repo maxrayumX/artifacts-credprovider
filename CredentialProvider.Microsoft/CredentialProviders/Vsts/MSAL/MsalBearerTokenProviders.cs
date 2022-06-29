@@ -15,17 +15,17 @@ namespace NuGetCredentialProvider.CredentialProviders.Vsts
     /// <summary>
     /// Acquire an AAD token via the Msal cache
     /// </summary>
-    internal class MsalCacheBearerTokenProvider : IBearerTokenProvider
+    internal class MsalSilentBearerTokenProvider : IBearerTokenProvider
     {
         private readonly IMsalTokenProvider msalTokenProvider;
 
-        public MsalCacheBearerTokenProvider(IMsalTokenProvider msalTokenProvider)
+        public MsalSilentBearerTokenProvider(IMsalTokenProvider msalTokenProvider)
         {
             this.msalTokenProvider = msalTokenProvider;
         }
 
         public bool Interactive { get; } = false;
-        public string Name { get; } = "MSAL Broker and Cache";
+        public string Name => $"MSAL Silent " + msalTokenProvider.NameSuffix;
 
         public async Task<string> GetTokenAsync(Uri uri, CancellationToken cancellationToken)
         {

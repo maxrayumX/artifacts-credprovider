@@ -6,19 +6,30 @@ REM and all scenarios should succeed non-interactively.
 
 set TEST_FEED=%1
 
-echo "Testing MSAL"
+echo "Testing MSAL with broker"
 set NUGET_CREDENTIALPROVIDER_MSAL_ENABLED=true
+set NUGET_CREDENTIALPROVIDER_MSAL_ALLOW_BROKER=true
 CALL :TEST_FRAMEWORKS
 IF %ERRORLEVEL% NEQ 0 (
-    echo "MSAL failed: %ERRORLEVEL%"
+    echo "Failed: %ERRORLEVEL%"
+    exit /b %ERRORLEVEL%
+)
+
+echo "Testing MSAL without broker"
+set NUGET_CREDENTIALPROVIDER_MSAL_ENABLED=true
+set NUGET_CREDENTIALPROVIDER_MSAL_ALLOW_BROKER=false
+CALL :TEST_FRAMEWORKS
+IF %ERRORLEVEL% NEQ 0 (
+    echo "Failed: %ERRORLEVEL%"
     exit /b %ERRORLEVEL%
 )
 
 echo "Testing ADAL"
 set NUGET_CREDENTIALPROVIDER_MSAL_ENABLED=false
+set NUGET_CREDENTIALPROVIDER_MSAL_ALLOW_BROKER=
 CALL :TEST_FRAMEWORKS
 IF %ERRORLEVEL% NEQ 0 (
-    echo "ADAL failed: %ERRORLEVEL%"
+    echo "Failed: %ERRORLEVEL%"
     exit /b %ERRORLEVEL%
 )
 
@@ -28,10 +39,9 @@ exit /b 0
 
 :TEST_FRAMEWORKS
 for %%I in ("net6.0","netcoreapp3.1","net461") DO (
-    del "!UserProfile!\AppData\Local\MicrosoftCredentialProvider\ADALTokenCache.dat" 2>NUL
-    del "!UserProfile!\AppData\Local\MicrosoftCredentialProvider\SessionTokenCache.dat" 2>NUL
-    echo Testing %%I with NUGET_CREDENTIALPROVIDER_MSAL_ENABLED=!NUGET_CREDENTIALPROVIDER_MSAL_ENABLED!
-    dotnet run -f %%I --project CredentialProvider.Microsoft\CredentialProvider.Microsoft.csproj -- -N -U !TEST_FEED! -V Debug -R > test.%%I.%NUGET_CREDENTIALPROVIDER_MSAL_ENABLED%.log
+    del /q "!UserProfile!\AppData\Local\MicrosoftCredentialProvider\*.dat" 2>NUL
+    echo Testing %%I with NUGET_CREDENTIALPROVIDER_MSAL_ENABLED=!NUGET_CREDENTIALPROVIDER_MSAL_ENABLED! NUGET_CREDENTIALPROVIDER_MSAL_ALLOW_BROKER=!NUGET_CREDENTIALPROVIDER_MSAL_ALLOW_BROKER!
+    dotnet run -f %%I --project CredentialProvider.Microsoft\CredentialProvider.Microsoft.csproj -- -N -U !TEST_FEED! -V Debug -R > test.%%I.%NUGET_CREDENTIALPROVIDER_MSAL_ENABLED%.%NUGET_CREDENTIALPROVIDER_MSAL_ALLOW_BROKER%.log
     IF !ERRORLEVEL! NEQ 0 (
         echo "Previous command execution failed: !ERRORLEVEL!"
         exit /b !ERRORLEVEL!

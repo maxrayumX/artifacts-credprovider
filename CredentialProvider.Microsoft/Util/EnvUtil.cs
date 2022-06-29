@@ -32,9 +32,11 @@ namespace NuGetCredentialProvider.Util
         public const string BuildTaskExternalEndpoints = "VSS_NUGET_EXTERNAL_FEED_ENDPOINTS";
 
         public const string MsalEnabledEnvVar = "NUGET_CREDENTIALPROVIDER_MSAL_ENABLED";
+        public const string MsalLoginHintEnvVar = "NUGET_CREDENTIALPROVIDER_MSAL_LOGIN_HINT";
         public const string MsalAuthorityEnvVar = "NUGET_CREDENTIALPROVIDER_MSAL_AUTHORITY";
         public const string MsalFileCacheEnvVar = "NUGET_CREDENTIALPROVIDER_MSAL_FILECACHE_ENABLED";
         public const string MsalFileCacheLocationEnvVar = "NUGET_CREDENTIALPROVIDER_MSAL_FILECACHE_LOCATION";
+        public const string MsalAllowBrokerEnvVar = "NUGET_CREDENTIALPROVIDER_MSAL_ALLOW_BROKER";
 
         private static readonly string LocalAppDataLocation = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData, Environment.SpecialFolderOption.Create), "MicrosoftCredentialProvider");
 
@@ -68,6 +70,11 @@ namespace NuGetCredentialProvider.Util
             return null;
         }
 
+        public static string GetMsalLoginHint()
+        {
+            return Environment.GetEnvironmentVariable(MsalLoginHintEnvVar);
+        }
+
         public static string GetMsalCacheLocation()
         {
             string msalCacheFromEnvironment = Environment.GetEnvironmentVariable(MsalFileCacheLocationEnvVar);
@@ -76,13 +83,19 @@ namespace NuGetCredentialProvider.Util
 
         internal static bool MsalEnabled()
         {
-            return GetEnabledFromEnvironment(MsalEnabledEnvVar, defaultValue: false);
+            return GetEnabledFromEnvironment(MsalEnabledEnvVar, defaultValue: true);
         }
 
         public static bool MsalFileCacheEnabled()
         {
-            return GetEnabledFromEnvironment(MsalFileCacheEnvVar, defaultValue: false);
+            return GetEnabledFromEnvironment(MsalFileCacheEnvVar, defaultValue: true);
         }
+
+        public static bool MsalAllowBrokerEnabled()
+        {
+            return GetEnabledFromEnvironment(MsalAllowBrokerEnvVar, defaultValue: true);
+        }
+
 
         public static IList<string> GetHostsFromEnvironment(ILogger logger, string envVar, IEnumerable<string> defaultHosts, [CallerMemberName] string collectionName = null)
         {
