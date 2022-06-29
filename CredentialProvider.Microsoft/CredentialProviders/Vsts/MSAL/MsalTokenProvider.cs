@@ -209,19 +209,22 @@ namespace NuGetCredentialProvider.CredentialProviders.Vsts
             var publicClientBuilder = PublicClientApplicationBuilder.Create(this.clientId)
                 .WithAuthority(this.authority);
 
-            // if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            if (withBroker)
             {
-                publicClientBuilder = publicClientBuilder.WithBrokerPreview();
+                if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+                {
+                    publicClientBuilder = publicClientBuilder.WithBrokerPreview();
+                }
+                else
+                {
+                    publicClientBuilder = publicClientBuilder.WithBroker();
+                }
             }
 
-            if (useLocalHost)
-            {
-                publicClientBuilder.WithRedirectUri("http://localhost");
-            }
-            else
-            {
-                publicClientBuilder.WithRedirectUri(NativeClientRedirect);
-            }
+            publicClientBuilder = publicClientBuilder.WithRedirectUri(
+                useLocalHost
+                    ? "http://localhost"
+                    : NativeClientRedirect);
 
             var publicClient = publicClientBuilder.Build();
             helper?.RegisterCache(publicClient.UserTokenCache);
