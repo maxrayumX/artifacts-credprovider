@@ -88,7 +88,7 @@ namespace NuGetCredentialProvider.CredentialProviders.Vsts
             
             accounts.AddRange(await publicClient.GetAccountsAsync());
 
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            if (this.brokerEnabled && RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
                 accounts.Add(PublicClientApplication.OperatingSystemAccount);
             }
@@ -97,13 +97,14 @@ namespace NuGetCredentialProvider.CredentialProviders.Vsts
             {
                 try
                 {
-                    if (!string.IsNullOrEmpty(loginHint) && loginHint.Equals(account.ToString(), StringComparison.Ordinal))
+                    string canonicalName = $"{account.Environment}\\{account.HomeAccountId}\\{account.Username}";
+                    if (!string.IsNullOrEmpty(loginHint) && !loginHint.Equals(canonicalName, StringComparison.Ordinal))
                     {
-                        this.Logger.Verbose($"Skipping `{account.ToString()}`, because it does not match Login Hint:`{loginHint}`.");
+                        this.Logger.Verbose($"Skipping `{canonicalName}`, because it does not match Login Hint:`{loginHint}`.");
                         continue;
                     }
 
-                    this.Logger.Verbose($"Attempting to use identity `{account.ToString()}`.");
+                    this.Logger.Verbose($"Attempting to use identity `{canonicalName}`.");
                     var silentBuilder = publicClient.AcquireTokenSilent(new string[] { resource }, account);
                     var result = await silentBuilder.ExecuteAsync(cancellationToken);
                     return new MsalToken(result);
